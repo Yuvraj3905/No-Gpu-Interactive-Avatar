@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Low-Cost Avatar — Gaussian Splat Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; }
+    #app {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+      gap: 16px;
+    }
+    h1 { font-size: 20px; font-weight: 500; color: #58a6ff; }
+    .avatar-container {
+      width: 400px;
+      height: 500px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      border: 1px solid #30363d;
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    button {
+      padding: 6px 14px;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      background: #21262d;
+      color: #e6edf3;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover { background: #30363d; border-color: #58a6ff; }
+    .status { font-size: 12px; color: #8b949e; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-webgpu { background: #238636; color: #fff; }
+    .badge-webgl { background: #d29922; color: #000; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>Gaussian Splat Avatar <span class="badge" id="renderer-badge">detecting...</span></h1>
+    <div class="avatar-container" id="avatar-container"></div>
+    <div class="controls">
+      <button data-emotion="happy">Happy</button>
+      <button data-emotion="sad">Sad</button>
+      <button data-emotion="angry">Angry</button>
+      <button data-emotion="surprised">Surprised</button>
+      <button data-emotion="thinking">Thinking</button>
+      <button data-emotion="neutral">Neutral</button>
+    </div>
+    <p class="status" id="status">Loading Gaussian splat avatar...</p>
+    <p class="status">
+      This demo requires a .lca avatar file and FLAME assets.
+      See docs for how to create them.
+    </p>
+  </div>
+
+  <script type="module">
+    import { LowCostAvatar } from 'low-cost-avatar'
+
+    const status = document.getElementById('status')
+    const badge = document.getElementById('renderer-badge')
+    const container = document.getElementById('avatar-container')
+
+    if (navigator.gpu) {
+      badge.textContent = 'WebGPU'
+      badge.className = 'badge badge-webgpu'
+    } else {
+      badge.textContent = 'WebGL'
+      badge.className = 'badge badge-webgl'
+    }
+
+    const avatar = new LowCostAvatar({
+      container,
+      avatar: './avatar.lca',
+      renderer: 'splat',
+      quality: 'high',
+      assetsBaseUrl: './',
+    })
+
+    window.avatar = avatar
+
+    avatar.on('loaded', () => {
+      status.textContent = 'Gaussian splat avatar loaded! Try the emotion controls.'
+    })
+
+    avatar.on('error', (err) => {
+      status.textContent = 'Error: ' + err.message
+    })
+
+    avatar.load().catch((err) => {
+      status.textContent = 'Failed: ' + err.message + '. Make sure avatar.lca and flame/ assets exist.'
+    })
+
+    document.querySelectorAll('[data-emotion]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const emotion = btn.dataset.emotion
+        if (emotion === 'neutral') {
+          avatar.clearEmotion({ transition: 500 })
+        } else {
+          avatar.setEmotion(emotion, { intensity: 0.85, transition: 400 })
+        }
+      })
+    })
+  </script>
+</body>
+</html>
