@@ -11,6 +11,13 @@ import { GesturePlayer } from './animation/GesturePlayer.js'
 import { registerProceduralGestures } from './animation/ProceduralGestures.js'
 import { AudioAnalyzer } from './audio/AudioAnalyzer.js'
 import { AssetManager } from './assets/AssetManager.js'
+import { SplatScene } from './renderer/splat/SplatScene.js'
+import { SplatAsset } from './renderer/splat/SplatAsset.js'
+import { FLAMEModel } from './renderer/splat/FLAMEModel.js'
+import { BlendshapeToFLAME } from './renderer/splat/BlendshapeToFLAME.js'
+import { GaussianUpdater } from './renderer/splat/GaussianUpdater.js'
+import type { FLAMEAssets, BlendshapeToFLAMEMappings } from './renderer/splat/types.js'
+import type { RendererType } from './types/index.js'
 import type {
   AvatarOptions, AvatarEventMap, SpeakOptions, EmotionName,
   EmotionOptions, TransitionOptions, BlendshapeMap, BoneRotation,
@@ -32,6 +39,14 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
   private loaded = false
   private speaking = false
   private lastFrameTime = 0
+  private rendererType: RendererType
+  private splatScene: SplatScene | null = null
+  private splatAsset: SplatAsset | null = null
+  private flameModel: FLAMEModel | null = null
+  private blendshapeToFlame: BlendshapeToFLAME | null = null
+  private gaussianUpdater: GaussianUpdater | null = null
+  private gaussianPositions: Float32Array | null = null
+  private gaussianRotations: Float32Array | null = null
 
   constructor(options: AvatarOptions) {
     super()
@@ -44,6 +59,7 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
       renderer: options.renderer ?? 'mesh',
     }
 
+    this.rendererType = options.renderer ?? 'mesh'
     this.qualityManager = new QualityManager(this.options.quality)
     this.blendshapeMixer = new BlendshapeMixer(DEFAULT_MIXER_PRIORITIES)
     this.idleSystem = new IdleSystem()
@@ -57,6 +73,14 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
   }
 
   async load(): Promise<void> {
+    if (this.rendererType === 'splat') {
+      await this.loadSplat()
+    } else {
+      await this.loadMesh()
+    }
+  }
+
+  private async loadMesh(): Promise<void> {
     const quality = this.qualityManager.getCurrentTier()
 
     this.sceneManager = new SceneManager({
@@ -107,6 +131,41 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
 
     this.sceneManager.onRender((delta) => this.onFrame(delta))
     this.sceneManager.startRenderLoop()
+
+    this.loaded = true
+    this.emit('loaded')
+  }
+
+  private async loadSplat(): Promise<void> {
+    const quality = this.qualityManager.getCurrentTier()
+
+    const response = await fetch(this.options.avatar)
+    if (!response.ok) throw new Error(`Failed to load splat avatar from ${this.options.avatar}`)
+    const buffer = await response.arrayBuffer()
+
+    this.splatAsset = new SplatAsset()
+    await this.splatAsset.load(buffer)
+
+    const gaussianData = this.splatAsset.getGaussianData()
+    const binding = this.splatAsset.getBinding()
+
+    const flameAssets = await this.loadFLAMEAssets()
+    this.flameModel = new FLAMEModel(flameAssets)
+
+    const mappings = await this.loadBlendshapeMappings()
+    this.blendshapeToFlame = new BlendshapeToFLAME(mappings)
+
+    this.gaussianUpdater = new GaussianUpdater(flameAssets.faces, binding)
+    this.gaussianPositions = new Float32Array(gaussianData.count * 3)
+    this.gaussianRotations = new Float32Array(gaussianData.count * 4)
+
+    this.splatScene = new SplatScene(this.options.container, quality)
+    await this.splatScene.initBackend(gaussianData.count)
+    this.splatScene.uploadGaussians(gaussianData)
+
+    this.idleSystem.start()
+    this.splatScene.onRender((delta) => this.onSplatFrame(delta))
+    this.splatScene.startRenderLoop()
 
     this.loaded = true
     this.emit('loaded')
@@ -208,6 +267,7 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
   destroy(): void {
     this.sceneManager?.dispose()
     this.avatarModel?.dispose()
+    this.splatScene?.dispose()
     this.audioAnalyzer?.dispose()
     this.idleSystem.stop()
     this.blendshapeMixer.clearAll()
@@ -245,6 +305,94 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
     )
 
     this.gesturePlayer.update(delta)
+  }
+
+  private onSplatFrame(delta: number): void {
+    const now = performance.now()
+    if (this.lastFrameTime > 0) {
+      this.qualityManager.recordFps(1000 / (now - this.lastFrameTime))
+    }
+    this.lastFrameTime = now
+
+    const lipSyncWeights = this.speaking && this.lipSyncEngine ? this.lipSyncEngine.update() : {}
+    const idleWeights = this.idleSystem.update(delta)
+    const emotionWeights = this.emotionSystem.update(delta)
+
+    this.blendshapeMixer.setChannel('lipSync', lipSyncWeights)
+    this.blendshapeMixer.setChannel('idle', idleWeights)
+    this.blendshapeMixer.setChannel('emotion', emotionWeights)
+
+    const finalWeights = this.blendshapeMixer.mix()
+    const flameParams = this.blendshapeToFlame!.convert(finalWeights)
+
+    const drift = this.idleSystem.getHeadDrift()
+    const emotionMods = this.emotionSystem.getCurrentModifiers()
+    flameParams.neckPose[0] = (drift.pitch + emotionMods.headPitchOffset) * Math.PI / 180
+    flameParams.neckPose[1] = (drift.yaw + emotionMods.headYawOffset) * Math.PI / 180
+    flameParams.neckPose[2] = drift.roll * Math.PI / 180
+
+    const deformedVertices = this.flameModel!.deform(this.splatAsset!.getFLAMEShape(), flameParams)
+    this.gaussianUpdater!.update(deformedVertices, this.gaussianPositions!, this.gaussianRotations!)
+    this.splatScene!.updatePositions(this.gaussianPositions!, this.gaussianRotations!)
+  }
+
+  private async loadFLAMEAssets(): Promise<FLAMEAssets> {
+    const base = this.options.assetsBaseUrl
+    const load = async (name: string) => {
+      const r = await fetch(base + 'flame/' + name)
+      if (!r.ok) throw new Error(`Failed to load FLAME asset: ${name}`)
+      return r.arrayBuffer()
+    }
+
+    const [templateBuf, shapeBuf, exprBuf, poseBuf, lbsBuf, jointsBuf, parentsBuf, facesBuf] = await Promise.all([
+      load('flame_template.bin'),
+      load('flame_shapedirs.bin'),
+      load('flame_exprdirs.bin'),
+      load('flame_posedirs.bin'),
+      load('flame_lbs_weights.bin'),
+      load('flame_joints.bin'),
+      load('flame_joint_parents.bin'),
+      load('flame_faces.bin'),
+    ])
+
+    const vertexCount = new Float32Array(templateBuf).length / 3
+    const faceCount = new Uint32Array(facesBuf).length / 3
+    const jointParents = new Int32Array(parentsBuf)
+
+    return {
+      templateVertices: new Float32Array(templateBuf),
+      shapeDirs: new Float32Array(shapeBuf),
+      exprDirs: new Float32Array(exprBuf),
+      poseDirs: new Float32Array(poseBuf),
+      lbsWeights: new Float32Array(lbsBuf),
+      joints: new Float32Array(jointsBuf),
+      jointCount: jointParents.length,
+      jointParents,
+      faces: new Uint32Array(facesBuf),
+      vertexCount,
+      faceCount,
+    }
+  }
+
+  private async loadBlendshapeMappings(): Promise<BlendshapeToFLAMEMappings> {
+    const base = this.options.assetsBaseUrl
+    const load = async (name: string) => {
+      const r = await fetch(base + 'flame/' + name)
+      if (!r.ok) throw new Error(`Failed to load mapping: ${name}`)
+      return r.arrayBuffer()
+    }
+
+    const [exprBuf, jawBuf, eyeBuf] = await Promise.all([
+      load('arkit_to_flame_expr.bin'),
+      load('viseme_to_jaw.bin'),
+      load('eye_to_flame_pose.bin'),
+    ])
+
+    return {
+      arkitToExpr: new Float32Array(exprBuf),
+      visemeToJaw: new Float32Array(jawBuf),
+      eyeToPose: new Float32Array(eyeBuf),
+    }
   }
 
   private getCurrentFps(): number {

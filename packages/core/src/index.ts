@@ -5,7 +5,7 @@ export type {
   AvatarOptions, SpeakOptions, EmotionOptions, TransitionOptions,
   BoneRotation, AvatarEvent, AvatarEventMap, PerformanceMetrics,
   QualityTier, MixerPriorities, AssetManifest, AvatarManifestEntry,
-  GestureManifestEntry, AnimationChannel,
+  GestureManifestEntry, AnimationChannel, RendererType,
   ARKitBlendshapeName, OculusVisemeName, BlendshapeName, BlendshapeMap,
   EmotionName, EmotionPreset,
 } from './types/index.js'
