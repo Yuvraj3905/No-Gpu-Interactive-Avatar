@@ -28,6 +28,22 @@ importers:
         specifier: ^6.1.0
         version: 6.4.1
 
+  examples/splat-demo:
+    dependencies:
+      '@sparkjsdev/spark':
+        specifier: ^0.1.10
+        version: 0.1.10
+      low-cost-avatar:
+        specifier: workspace:*
+        version: link:../../packages/core
+      three:
+        specifier: ^0.172.0
+        version: 0.172.0
+    devDependencies:
+      vite:
+        specifier: ^6.1.0
+        version: 6.4.1
+
   examples/vanilla:
     dependencies:
       low-cost-avatar:
@@ -43,6 +59,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@sparkjsdev/spark':
+        specifier: ^0.1.10
+        version: 0.1.10
       three:
         specifier: ^0.172.0
         version: 0.172.0
@@ -596,6 +615,9 @@ packages:
     resolution: {integrity: sha512-lWMnixq/QzxyhTV6NjQJ4SFo1J6PvOX8vUx5Wb4bBPsEb+8xZ89Bz6kOXpfXj9ak9AHTQVQzlgzBEc1SyM27xQ==}
     cpu: [x64]
     os: [win32]
+
+  '@sparkjsdev/spark@0.1.10':
+    resolution: {integrity: sha512-CiijdZQuj7KPDUqIZPiEqyUkJCYo1JqR05vq/V+ElxMwqR7L70ZuZDyIKcasjZHSiPB8pGRMH8HZGqUKO9aRPQ==}
 
   '@turbo/darwin-64@2.9.3':
     resolution: {integrity: sha512-P8foouaP+y/p+hhEGBoZpzMbpVvUMwPjDpcy6wN7EYfvvyISD1USuV27qWkczecihwuPJzQ1lDBuL8ERcavTyg==}
@@ -1721,6 +1743,10 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.60.1':
     optional: true
+
+  '@sparkjsdev/spark@0.1.10':
+    dependencies:
+      fflate: 0.8.2
 
   '@turbo/darwin-64@2.9.3':
     optional: true

@@ -1,59 +1,144 @@
-import type { RenderBackend, GaussianData } from './types.js'
+import * as THREE from 'three'
+import type { GaussianData } from './types.js'
 import type { QualityTier } from '../../types/index.js'
-import { WebGPUBackend } from './gpu/webgpu-backend.js'
-import { WebGLBackend } from './gpu/webgl-backend.js'
 
+/**
+ * SplatScene uses @sparkjsdev/spark's SplatMesh for rendering Gaussian splats.
+ * Spark handles depth sorting, WebGPU/WebGL rendering, and proper alpha blending.
+ *
+ * We use PackedSplats to construct Gaussians from our .lca data, and the
+ * onFrame callback to update positions each frame from FLAME deformation.
+ */
 export class SplatScene {
   private container: HTMLElement
-  private canvas: HTMLCanvasElement
-  private backend: RenderBackend | null = null
+  private renderer: THREE.WebGLRenderer
+  private scene: THREE.Scene
+  private camera: THREE.PerspectiveCamera
   private animationFrameId: number | null = null
   private onRenderCallback: ((delta: number) => void) | null = null
   private lastTime = 0
   private resizeObserver: ResizeObserver | null = null
 
-  private viewMatrix = new Float32Array(16)
-  private projMatrix = new Float32Array(16)
-  private cameraDistance = 1.5
-  private cameraHeight = 1.5
-  private fov = 30
+  // Spark splat mesh
+  private splatMesh: any = null
+  private packedSplats: any = null
+  private gaussianCount = 0
 
-  constructor(container: HTMLElement, _quality: QualityTier) {
+  // Stored Gaussian data for updates
+  private colors: Float32Array | null = null
+  private opacities: Float32Array | null = null
+  private scales: Float32Array | null = null
+
+  constructor(container: HTMLElement, quality: QualityTier) {
     this.container = container
-    this.canvas = document.createElement('canvas')
-    this.canvas.style.width = '100%'
-    this.canvas.style.height = '100%'
-    this.canvas.width = container.clientWidth
-    this.canvas.height = container.clientHeight
-    container.appendChild(this.canvas)
 
-    this.updateProjectionMatrix()
-    this.updateViewMatrix()
+    // Three.js setup
+    this.scene = new THREE.Scene()
+
+    const aspect = container.clientWidth / container.clientHeight
+    this.camera = new THREE.PerspectiveCamera(30, aspect, 0.1, 100)
+    this.camera.position.set(0, 1.5, 1.5)
+    this.camera.lookAt(0, 1.4, 0)
+
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: quality === 'high',
+      alpha: true,
+      powerPreference: quality === 'low' ? 'low-power' : 'high-performance',
+    })
+    this.renderer.setSize(container.clientWidth, container.clientHeight)
+    this.renderer.setPixelRatio(quality === 'low' ? 1 : Math.min(window.devicePixelRatio, 2))
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace
+    container.appendChild(this.renderer.domElement)
+
+    // Lighting for any non-splat objects
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5)
+    this.scene.add(ambient)
 
     this.resizeObserver = new ResizeObserver(() => this.handleResize())
     this.resizeObserver.observe(container)
   }
 
   async initBackend(gaussianCount: number): Promise<void> {
-    if (typeof navigator !== 'undefined' && navigator.gpu) {
-      try {
-        this.backend = new WebGPUBackend()
-        await this.backend.init(this.canvas, gaussianCount)
-        return
-      } catch {
-        // Fall through to WebGL
+    this.gaussianCount = gaussianCount
+    // Spark is loaded dynamically to avoid import issues in Node/test environments
+    try {
+      const spark = await import('@sparkjsdev/spark')
+      this.packedSplats = new spark.PackedSplats()
+      // Pre-allocate with dummy data — will be overwritten by uploadGaussians
+      const zeroVec3 = new THREE.Vector3(0, 0, 0)
+      const identityQuat = new THREE.Quaternion(0, 0, 0, 1)
+      const defaultScale = new THREE.Vector3(0.001, 0.001, 0.001)
+      const black = new THREE.Color(0, 0, 0)
+      for (let i = 0; i < gaussianCount; i++) {
+        this.packedSplats.pushSplat(zeroVec3, defaultScale, identityQuat, 0, black)
       }
+
+      this.splatMesh = new spark.SplatMesh({
+        packedSplats: this.packedSplats,
+      })
+      this.scene.add(this.splatMesh)
+    } catch (err) {
+      throw new Error(`Failed to initialize Spark splat renderer: ${err}`)
     }
-    this.backend = new WebGLBackend()
-    await this.backend.init(this.canvas, gaussianCount)
   }
 
   uploadGaussians(data: GaussianData): void {
-    this.backend?.uploadGaussians(data)
+    if (!this.packedSplats) return
+
+    this.colors = data.colors
+    this.opacities = data.opacities
+    this.scales = data.scales
+
+    const center = new THREE.Vector3()
+    const scale = new THREE.Vector3()
+    const quat = new THREE.Quaternion()
+    const color = new THREE.Color()
+
+    for (let i = 0; i < data.count; i++) {
+      center.set(data.positions[i * 3], data.positions[i * 3 + 1], data.positions[i * 3 + 2])
+      scale.set(
+        Math.exp(data.scales[i * 3]),
+        Math.exp(data.scales[i * 3 + 1]),
+        Math.exp(data.scales[i * 3 + 2]),
+      )
+      quat.set(data.rotations[i * 4], data.rotations[i * 4 + 1], data.rotations[i * 4 + 2], data.rotations[i * 4 + 3])
+      quat.normalize()
+
+      const opacity = 1 / (1 + Math.exp(-data.opacities[i])) // sigmoid
+
+      color.setRGB(data.colors[i * 3], data.colors[i * 3 + 1], data.colors[i * 3 + 2])
+
+      this.packedSplats.setSplat(i, center, scale, quat, opacity, color)
+    }
+
+    this.packedSplats.needsUpdate = true
   }
 
   updatePositions(positions: Float32Array, rotations: Float32Array): void {
-    this.backend?.updatePositions(positions, rotations)
+    if (!this.packedSplats || !this.colors || !this.opacities || !this.scales) return
+
+    const center = new THREE.Vector3()
+    const scale = new THREE.Vector3()
+    const quat = new THREE.Quaternion()
+    const color = new THREE.Color()
+
+    for (let i = 0; i < this.gaussianCount; i++) {
+      center.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2])
+      scale.set(
+        Math.exp(this.scales[i * 3]),
+        Math.exp(this.scales[i * 3 + 1]),
+        Math.exp(this.scales[i * 3 + 2]),
+      )
+      quat.set(rotations[i * 4], rotations[i * 4 + 1], rotations[i * 4 + 2], rotations[i * 4 + 3])
+      quat.normalize()
+
+      const opacity = 1 / (1 + Math.exp(-this.opacities[i]))
+      color.setRGB(this.colors[i * 3], this.colors[i * 3 + 1], this.colors[i * 3 + 2])
+
+      this.packedSplats.setSplat(i, center, scale, quat, opacity, color)
+    }
+
+    this.packedSplats.needsUpdate = true
   }
 
   onRender(callback: (delta: number) => void): void {
@@ -69,7 +154,7 @@ export class SplatScene {
       const delta = (now - this.lastTime) / 1000
       this.lastTime = now
       this.onRenderCallback?.(delta)
-      this.backend?.render(this.viewMatrix, this.projMatrix)
+      this.renderer.render(this.scene, this.camera)
     }
     loop()
   }
@@ -84,57 +169,19 @@ export class SplatScene {
   dispose(): void {
     this.stopRenderLoop()
     this.resizeObserver?.disconnect()
-    this.backend?.dispose()
-    this.canvas.remove()
-  }
-
-  private updateViewMatrix(): void {
-    const eye = [0, this.cameraHeight, this.cameraDistance]
-    const target = [0, this.cameraHeight - 0.1, 0]
-    const up = [0, 1, 0]
-    lookAt(this.viewMatrix, eye, target, up)
-  }
-
-  private updateProjectionMatrix(): void {
-    const aspect = this.canvas.width / this.canvas.height
-    perspective(this.projMatrix, this.fov * Math.PI / 180, aspect, 0.1, 100)
+    if (this.splatMesh) {
+      this.scene.remove(this.splatMesh)
+      this.splatMesh.dispose?.()
+    }
+    this.renderer.dispose()
+    this.renderer.domElement.remove()
   }
 
   private handleResize(): void {
     const w = this.container.clientWidth
     const h = this.container.clientHeight
-    this.canvas.width = w
-    this.canvas.height = h
-    this.backend?.resize(w, h)
-    this.updateProjectionMatrix()
+    this.camera.aspect = w / h
+    this.camera.updateProjectionMatrix()
+    this.renderer.setSize(w, h)
   }
-}
-
-function lookAt(out: Float32Array, eye: number[], target: number[], up: number[]): void {
-  let fx = target[0] - eye[0], fy = target[1] - eye[1], fz = target[2] - eye[2]
-  let len = Math.sqrt(fx * fx + fy * fy + fz * fz)
-  fx /= len; fy /= len; fz /= len
-
-  let sx = fy * up[2] - fz * up[1], sy = fz * up[0] - fx * up[2], sz = fx * up[1] - fy * up[0]
-  len = Math.sqrt(sx * sx + sy * sy + sz * sz)
-  sx /= len; sy /= len; sz /= len
-
-  const ux = sy * fz - sz * fy, uy = sz * fx - sx * fz, uz = sx * fy - sy * fx
-
-  out[0] = sx; out[1] = ux; out[2] = -fx; out[3] = 0
-  out[4] = sy; out[5] = uy; out[6] = -fy; out[7] = 0
-  out[8] = sz; out[9] = uz; out[10] = -fz; out[11] = 0
-  out[12] = -(sx * eye[0] + sy * eye[1] + sz * eye[2])
-  out[13] = -(ux * eye[0] + uy * eye[1] + uz * eye[2])
-  out[14] = (fx * eye[0] + fy * eye[1] + fz * eye[2])
-  out[15] = 1
-}
-
-function perspective(out: Float32Array, fovY: number, aspect: number, near: number, far: number): void {
-  const f = 1 / Math.tan(fovY / 2)
-  const nf = 1 / (near - far)
-  out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0
-  out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0
-  out[8] = 0; out[9] = 0; out[10] = (far + near) * nf; out[11] = -1
-  out[12] = 0; out[13] = 0; out[14] = 2 * far * near * nf; out[15] = 0
 }

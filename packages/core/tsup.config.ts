@@ -6,7 +6,7 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  external: ['three'],
+  external: ['three', '@sparkjsdev/spark'],
   treeshake: true,
   minify: false,
   splitting: false,
