@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Low-Cost Avatar — Realistic Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; }
+    #app {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+      gap: 16px;
+    }
+    h1 { font-size: 20px; font-weight: 500; color: #58a6ff; }
+    .avatar-container {
+      width: 380px;
+      height: 480px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      border: 1px solid #30363d;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+    }
+    .control-group label {
+      font-size: 11px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .control-group .buttons {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    button {
+      padding: 6px 14px;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      background: #21262d;
+      color: #e6edf3;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.15s;
+    }
+    button:hover { background: #30363d; border-color: #58a6ff; }
+    button:active { background: #388bfd33; }
+    button.active { background: #388bfd33; border-color: #58a6ff; color: #58a6ff; }
+    .status { font-size: 12px; color: #8b949e; }
+    .avatar-switcher {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .avatar-switcher button.active {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>Realistic Avatar Test</h1>
+
+    <div class="avatar-switcher">
+      <button id="switch-avaturn" class="active">Avaturn (Photo Scan)</button>
+      <button id="switch-avatarsdk">Avatar SDK (Photo Gen)</button>
+    </div>
+
+    <div class="avatar-container" id="avatar-container"></div>
+
+    <div class="control-group">
+      <label>Emotions</label>
+      <div class="buttons">
+        <button data-emotion="happy">Happy</button>
+        <button data-emotion="sad">Sad</button>
+        <button data-emotion="angry">Angry</button>
+        <button data-emotion="surprised">Surprised</button>
+        <button data-emotion="thinking">Thinking</button>
+        <button data-emotion="disgusted">Disgusted</button>
+        <button data-emotion="fearful">Fearful</button>
+        <button data-emotion="neutral">Neutral</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Gestures</label>
+      <div class="buttons">
+        <button data-gesture="nod">Nod</button>
+        <button data-gesture="wave">Wave</button>
+        <button data-gesture="shrug">Shrug</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Direct Control</label>
+      <div class="buttons">
+        <button id="btn-smile">Smile</button>
+        <button id="btn-blink">Blink</button>
+        <button id="btn-eyebrows-up">Eyebrows Up</button>
+        <button id="btn-mouth-open">Mouth Open</button>
+        <button id="btn-reset">Reset All</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Idle Animation</label>
+      <div class="buttons">
+        <button id="btn-idle-on" class="active">On</button>
+        <button id="btn-idle-off">Off</button>
+      </div>
+    </div>
+
+    <p class="status" id="status">Loading avatar...</p>
+  </div>
+
+  <script type="module">
+    import { LowCostAvatar } from 'low-cost-avatar'
+
+    const status = document.getElementById('status')
+    const container = document.getElementById('avatar-container')
+    let avatar = null
+    let currentAvatar = 'avaturn'
+
+    async function loadAvatar(glbFile) {
+      if (avatar) {
+        avatar.destroy()
+        // Remove old canvas elements safely
+        while (container.firstChild) {
+          container.removeChild(container.firstChild)
+        }
+      }
+
+      status.textContent = `Loading ${glbFile}...`
+
+      avatar = new LowCostAvatar({
+        container,
+        avatar: `./${glbFile}`,
+        quality: 'high',
+        cache: true,
+      })
+
+      window.avatar = avatar
+
+      avatar.on('loaded', () => {
+        status.textContent = `${glbFile} loaded. Try the controls! (window.avatar available in console)`
+      })
+
+      avatar.on('error', (err) => {
+        status.textContent = `Error: ${err.message}`
+      })
+
+      avatar.on('gestureComplete', (name) => {
+        status.textContent = `Gesture "${name}" completed`
+      })
+
+      avatar.on('performanceWarning', (metrics) => {
+        status.textContent = `Quality: ${metrics.qualityTier} (${Math.round(metrics.fps)} FPS)`
+      })
+
+      try {
+        await avatar.load()
+      } catch (err) {
+        status.textContent = `Failed: ${err.message}`
+      }
+    }
+
+    // Avatar switcher
+    document.getElementById('switch-avaturn').addEventListener('click', (e) => {
+      if (currentAvatar === 'avaturn') return
+      currentAvatar = 'avaturn'
+      document.querySelectorAll('.avatar-switcher button').forEach(b => b.classList.remove('active'))
+      e.target.classList.add('active')
+      loadAvatar('avaturn.glb')
+    })
+
+    document.getElementById('switch-avatarsdk').addEventListener('click', (e) => {
+      if (currentAvatar === 'avatarsdk') return
+      currentAvatar = 'avatarsdk'
+      document.querySelectorAll('.avatar-switcher button').forEach(b => b.classList.remove('active'))
+      e.target.classList.add('active')
+      loadAvatar('avatarsdk.glb')
+    })
+
+    // Emotion buttons
+    let activeEmotion = null
+    document.querySelectorAll('[data-emotion]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const emotion = btn.dataset.emotion
+        document.querySelectorAll('[data-emotion]').forEach(b => b.classList.remove('active'))
+
+        if (emotion === 'neutral' || emotion === activeEmotion) {
+          avatar.clearEmotion({ transition: 500 })
+          activeEmotion = null
+        } else {
+          avatar.setEmotion(emotion, { intensity: 0.85, transition: 400 })
+          btn.classList.add('active')
+          activeEmotion = emotion
+        }
+      })
+    })
+
+    // Gesture buttons
+    document.querySelectorAll('[data-gesture]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        avatar.playGesture(btn.dataset.gesture)
+      })
+    })
+
+    // Direct blendshape control
+    document.getElementById('btn-smile').addEventListener('click', () => {
+      avatar.setBlendshapes({
+        mouthSmileLeft: 0.9,
+        mouthSmileRight: 0.9,
+        cheekSquintLeft: 0.5,
+        cheekSquintRight: 0.5,
+        eyeSquintLeft: 0.3,
+        eyeSquintRight: 0.3,
+      })
+      setTimeout(() => avatar.clearBlendshapes(), 1500)
+    })
+
+    document.getElementById('btn-blink').addEventListener('click', () => {
+      avatar.setBlendshapes({ eyeBlinkLeft: 1.0, eyeBlinkRight: 1.0 })
+      setTimeout(() => avatar.clearBlendshapes(), 200)
+    })
+
+    document.getElementById('btn-eyebrows-up').addEventListener('click', () => {
+      avatar.setBlendshapes({
+        browInnerUp: 0.8,
+        browOuterUpLeft: 0.7,
+        browOuterUpRight: 0.7,
+        eyeWideLeft: 0.3,
+        eyeWideRight: 0.3,
+      })
+      setTimeout(() => avatar.clearBlendshapes(), 1500)
+    })
+
+    document.getElementById('btn-mouth-open').addEventListener('click', () => {
+      avatar.setBlendshapes({ jawOpen: 0.6, mouthFunnel: 0.2 })
+      setTimeout(() => avatar.clearBlendshapes(), 1500)
+    })
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      avatar.clearBlendshapes()
+      avatar.clearEmotion({ transition: 200 })
+      document.querySelectorAll('[data-emotion]').forEach(b => b.classList.remove('active'))
+      activeEmotion = null
+    })
+
+    // Idle toggle
+    document.getElementById('btn-idle-on').addEventListener('click', (e) => {
+      avatar.setIdle(true)
+      document.getElementById('btn-idle-off').classList.remove('active')
+      e.target.classList.add('active')
+    })
+
+    document.getElementById('btn-idle-off').addEventListener('click', (e) => {
+      avatar.setIdle(false)
+      document.getElementById('btn-idle-on').classList.remove('active')
+      e.target.classList.add('active')
+    })
+
+    // Load default
+    loadAvatar('avaturn.glb')
+  </script>
+</body>
+</html>

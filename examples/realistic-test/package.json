@@ -1,0 +1,16 @@
+{
+  "name": "example-realistic-test",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "low-cost-avatar": "workspace:*",
+    "three": "^0.172.0"
+  },
+  "devDependencies": {
+    "vite": "^6.1.0"
+  }
+}

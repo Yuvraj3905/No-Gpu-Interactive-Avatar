@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+      # Bundle size check
+      - name: Check core bundle size
+        run: |
+          SIZE=$(wc -c < packages/core/dist/index.js)
+          GZIP_SIZE=$(gzip -c packages/core/dist/index.js | wc -c)
+          echo "Bundle size: $SIZE bytes (gzipped: $GZIP_SIZE bytes)"
+          MAX_GZIP=204800  # 200KB
+          if [ "$GZIP_SIZE" -gt "$MAX_GZIP" ]; then
+            echo "ERROR: Bundle size exceeds 200KB gzipped limit!"
+            exit 1
+          fi

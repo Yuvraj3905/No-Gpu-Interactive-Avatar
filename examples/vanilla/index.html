@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Low-Cost Avatar — Vanilla Example</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #fff; }
+    #app {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 20px;
+    }
+    #avatar-container {
+      width: 400px;
+      height: 500px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #16213e;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 500px;
+    }
+    button {
+      padding: 8px 16px;
+      border: 1px solid #555;
+      border-radius: 6px;
+      background: #0f3460;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover { background: #1a5276; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    h1 { font-size: 24px; font-weight: 400; }
+    .status { font-size: 12px; color: #888; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>Low-Cost Avatar SDK</h1>
+    <div id="avatar-container"></div>
+    <div class="controls">
+      <button id="btn-happy">Happy</button>
+      <button id="btn-sad">Sad</button>
+      <button id="btn-angry">Angry</button>
+      <button id="btn-surprised">Surprised</button>
+      <button id="btn-thinking">Thinking</button>
+      <button id="btn-neutral">Neutral</button>
+    </div>
+    <div class="controls">
+      <button id="btn-nod">Nod</button>
+      <button id="btn-wave">Wave</button>
+      <button id="btn-shrug">Shrug</button>
+    </div>
+    <p class="status" id="status">Loading avatar...</p>
+  </div>
+
+  <script type="module">
+    import { LowCostAvatar } from 'low-cost-avatar'
+
+    const status = document.getElementById('status')
+    const container = document.getElementById('avatar-container')
+
+    const avatar = new LowCostAvatar({
+      container,
+      avatar: './sample-avatar.glb',
+      quality: 'auto',
+      cache: true,
+    })
+
+    // Expose for console testing
+    window.avatar = avatar
+
+    avatar.on('loaded', () => {
+      status.textContent = 'Avatar loaded! Try the controls below.'
+    })
+
+    avatar.on('error', (err) => {
+      status.textContent = `Error: ${err.message}`
+    })
+
+    avatar.on('performanceWarning', (metrics) => {
+      status.textContent = `Quality adjusted to ${metrics.qualityTier} (${Math.round(metrics.fps)} FPS)`
+    })
+
+    avatar.load().catch((err) => {
+      status.textContent = `Failed to load: ${err.message}`
+    })
+
+    // Emotion buttons
+    const emotions = ['happy', 'sad', 'angry', 'surprised', 'thinking', 'neutral']
+    for (const emotion of emotions) {
+      document.getElementById(`btn-${emotion}`)?.addEventListener('click', () => {
+        if (emotion === 'neutral') {
+          avatar.clearEmotion({ transition: 500 })
+        } else {
+          avatar.setEmotion(emotion, { intensity: 0.8, transition: 500 })
+        }
+      })
+    }
+
+    // Gesture buttons
+    const gestures = ['nod', 'wave', 'shrug']
+    for (const gesture of gestures) {
+      document.getElementById(`btn-${gesture}`)?.addEventListener('click', () => {
+        avatar.playGesture(gesture)
+      })
+    }
+  </script>
+</body>
+</html>
