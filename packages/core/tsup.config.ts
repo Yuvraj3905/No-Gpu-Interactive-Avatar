@@ -10,4 +10,5 @@ export default defineConfig({
   treeshake: true,
   minify: false,
   splitting: false,
+  loader: { '.wgsl': 'text' },
 })
