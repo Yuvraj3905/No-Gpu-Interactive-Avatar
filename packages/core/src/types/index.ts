@@ -6,12 +6,16 @@ export { EMOTION_PRESETS } from './emotions.js'
 
 export type QualityTier = 'high' | 'medium' | 'low'
 
+export type RendererType = 'mesh' | 'splat'
+
 export interface AvatarOptions {
   container: HTMLElement
   avatar: string
   quality?: QualityTier | 'auto'
   assetsBaseUrl?: string
   cache?: boolean
+  /** Renderer type. 'mesh' for Three.js (default), 'splat' for Gaussian splatting */
+  renderer?: RendererType
 }
 
 export interface SpeakOptions {

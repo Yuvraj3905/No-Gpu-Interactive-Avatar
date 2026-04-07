@@ -41,6 +41,7 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
       quality: options.quality ?? 'auto',
       assetsBaseUrl: options.assetsBaseUrl ?? './',
       cache: options.cache ?? true,
+      renderer: options.renderer ?? 'mesh',
     }
 
     this.qualityManager = new QualityManager(this.options.quality)
