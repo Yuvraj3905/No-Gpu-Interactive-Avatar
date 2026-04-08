@@ -69,40 +69,51 @@ export class FLAMEModel {
     params: FLAMEParams,
     vertexCount: number,
   ): void {
-    const { lbsWeights } = this.assets
+    const { lbsWeights, joints } = this.assets
+
+    // FLAME joints: 0=neck, 1=jaw, 2=left_eye, 3=right_eye, 4=head
+    // Compute joint positions from current deformed vertices via joints array
+    // (simplified: use the pre-computed joint positions from the assets)
+    const neckJoint = [joints[0], joints[1], joints[2]]
+    const jawJoint = [joints[3], joints[4], joints[5]]
 
     const jawRot = axisAngleToMatrix(params.jawPose)
     const neckRot = axisAngleToMatrix(params.neckPose)
 
     for (let v = 0; v < vertexCount; v++) {
+      // FLAME LBS weights: 0=neck, 1=jaw, 2=left_eye, 3=right_eye, 4=head
       const neckWeight = lbsWeights[v * 5]
       const jawWeight = lbsWeights[v * 5 + 1]
 
       if (neckWeight < 1e-5 && jawWeight < 1e-5) continue
 
-      const x = out[v * 3]
-      const y = out[v * 3 + 1]
-      const z = out[v * 3 + 2]
+      let x = out[v * 3]
+      let y = out[v * 3 + 1]
+      let z = out[v * 3 + 2]
 
-      let rx = x, ry = y, rz = z
-
+      // Jaw rotation around jaw joint
       if (jawWeight > 1e-5) {
-        const [jx, jy, jz] = applyRotation(jawRot, x, y, z)
-        rx += (jx - x) * jawWeight
-        ry += (jy - y) * jawWeight
-        rz += (jz - z) * jawWeight
+        // Translate to jaw joint local space
+        const lx = x - jawJoint[0], ly = y - jawJoint[1], lz = z - jawJoint[2]
+        const [rx, ry, rz] = applyRotation(jawRot, lx, ly, lz)
+        // Translate back and blend
+        x += ((rx + jawJoint[0]) - x) * jawWeight
+        y += ((ry + jawJoint[1]) - y) * jawWeight
+        z += ((rz + jawJoint[2]) - z) * jawWeight
       }
 
+      // Neck rotation around neck joint
       if (neckWeight > 1e-5) {
-        const [nx, ny, nz] = applyRotation(neckRot, rx, ry, rz)
-        rx += (nx - rx) * neckWeight
-        ry += (ny - ry) * neckWeight
-        rz += (nz - rz) * neckWeight
+        const lx = x - neckJoint[0], ly = y - neckJoint[1], lz = z - neckJoint[2]
+        const [rx, ry, rz] = applyRotation(neckRot, lx, ly, lz)
+        x += ((rx + neckJoint[0]) - x) * neckWeight
+        y += ((ry + neckJoint[1]) - y) * neckWeight
+        z += ((rz + neckJoint[2]) - z) * neckWeight
       }
 
-      out[v * 3] = rx
-      out[v * 3 + 1] = ry
-      out[v * 3 + 2] = rz
+      out[v * 3] = x
+      out[v * 3 + 1] = y
+      out[v * 3 + 2] = z
     }
   }
 }

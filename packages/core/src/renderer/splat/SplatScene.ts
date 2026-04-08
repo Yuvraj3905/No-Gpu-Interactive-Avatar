@@ -39,9 +39,9 @@ export class SplatScene {
     this.scene = new THREE.Scene()
 
     const aspect = container.clientWidth / container.clientHeight
-    this.camera = new THREE.PerspectiveCamera(45, aspect, 0.01, 1000)
-    this.camera.position.set(0, 0, 3)
-    this.camera.lookAt(0, 0, 0)
+    this.camera = new THREE.PerspectiveCamera(35, aspect, 0.01, 100)
+    this.camera.position.set(0, 0, 0.4)
+    this.camera.lookAt(0, -0.01, -0.03)
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: quality === 'high',
@@ -56,7 +56,7 @@ export class SplatScene {
     // Orbit controls for interactive viewing
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
-    this.controls.target.set(0, 0, 0)
+    this.controls.target.set(0, -0.01, -0.03)
 
     // Lighting for any non-splat objects
     const ambient = new THREE.AmbientLight(0xffffff, 0.5)

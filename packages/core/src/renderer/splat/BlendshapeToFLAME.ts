@@ -59,6 +59,15 @@ export class BlendshapeToFLAME {
     matVecMul(this.mappings.visemeToJaw, this.visemeVector, this.result.jawPose, 15, 3)
     matVecMul(this.mappings.eyeToPose, this.eyeVector, this.result.eyePose, 14, 6)
 
+    // Amplify expression output — FLAME blendshape dirs are very small,
+    // need larger coefficients for visible deformation
+    const EXPR_SCALE = 8.0
+    const JAW_SCALE = 5.0
+    const EYE_SCALE = 3.0
+    for (let i = 0; i < 100; i++) this.result.expression[i] *= EXPR_SCALE
+    for (let i = 0; i < 3; i++) this.result.jawPose[i] *= JAW_SCALE
+    for (let i = 0; i < 6; i++) this.result.eyePose[i] *= EYE_SCALE
+
     return this.result
   }
 }

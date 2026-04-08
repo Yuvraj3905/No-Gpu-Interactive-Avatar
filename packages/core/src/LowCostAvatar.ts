@@ -52,6 +52,8 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
   private gaussianOpacities: Float32Array | null = null
   private splatDirty = false
   private splatRebuilding = false
+  private splatLastRebuild = 0
+  private splatRebuildInterval = 150 // ms between rebuilds during transitions
 
   constructor(options: AvatarOptions) {
     super()
@@ -365,6 +367,10 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
     const finalWeights = this.blendshapeMixer.mix()
     const flameParams = this.blendshapeToFlame.convert(finalWeights)
 
+    // Mark dirty if any weights are non-zero (emotion transitioning, speaking, etc.)
+    const hasActivity = Object.keys(emotionWeights).length > 0 || Object.keys(lipSyncWeights).length > 0
+    if (hasActivity) this.splatDirty = true
+
     // Apply head drift from idle + emotion
     const drift = this.idleSystem.getHeadDrift()
     const emotionMods = this.emotionSystem.getCurrentModifiers()
@@ -379,10 +385,13 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
       this.gaussianPositions!, this.gaussianLogScales!, this.gaussianRotations!,
     )
 
-    // Only rebuild SplatMesh when expression changed (not every frame)
-    if (this.splatDirty && !this.splatRebuilding) {
+    // Rebuild SplatMesh when expression changed, throttled to avoid flooding
+    const now2 = performance.now()
+    const timeSinceRebuild = now2 - this.splatLastRebuild
+    if (this.splatDirty && !this.splatRebuilding && timeSinceRebuild > this.splatRebuildInterval) {
       this.splatDirty = false
       this.splatRebuilding = true
+      this.splatLastRebuild = now2
       this.splatScene!.updateFromTransform(
         this.gaussianPositions!, this.gaussianLogScales!, this.gaussianRotations!,
         this.gaussianColors!, this.gaussianOpacities!,
