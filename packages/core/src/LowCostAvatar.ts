@@ -371,13 +371,12 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
     const hasActivity = Object.keys(emotionWeights).length > 0 || Object.keys(lipSyncWeights).length > 0
     if (hasActivity) this.splatDirty = true
 
-    // Apply head drift from idle + emotion (reduced for splat renderer's tight framing)
-    const drift = this.idleSystem.getHeadDrift()
-    const emotionMods = this.emotionSystem.getCurrentModifiers()
-    const NECK_SCALE = 0.15 // scale down neck movement to prevent face leaving frame
-    flameParams.neckPose[0] = (drift.pitch + emotionMods.headPitchOffset) * Math.PI / 180 * NECK_SCALE
-    flameParams.neckPose[1] = (drift.yaw + emotionMods.headYawOffset) * Math.PI / 180 * NECK_SCALE
-    flameParams.neckPose[2] = drift.roll * Math.PI / 180 * NECK_SCALE
+    // Neck pose disabled for splat renderer — FLAME expressions handle the face,
+    // neck rotation moves the entire head out of the tight camera frame.
+    // TODO: implement camera-following-head for neck pose support
+    flameParams.neckPose[0] = 0
+    flameParams.neckPose[1] = 0
+    flameParams.neckPose[2] = 0
 
     // FLAME deform → face properties → Gaussian transform
     const verts = this.flameModel.deform(this.splatAsset!.getFLAMEShape(), flameParams)
