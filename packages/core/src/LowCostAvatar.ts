@@ -250,18 +250,25 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
   }
 
   setEmotion(emotion: EmotionName, options?: EmotionOptions): void {
-    this.emotionSystem.setEmotion(emotion, options)
+    // For splat renderer, use instant transition (no crossfade)
+    const opts = this.rendererType === 'splat'
+      ? { ...options, transition: 0 }
+      : options
+    this.emotionSystem.setEmotion(emotion, opts)
     const mods = this.emotionSystem.getCurrentModifiers()
     this.idleSystem.setBlinkRateMultiplier(mods.blinkRateMultiplier)
     this.idleSystem.setBreathingRateMultiplier(mods.breathingRateMultiplier)
-    this.splatDirty = true
+    if (this.rendererType === 'splat') this.splatDirty = true
   }
 
   clearEmotion(options?: TransitionOptions): void {
-    this.emotionSystem.clearEmotion(options)
+    const opts = this.rendererType === 'splat'
+      ? { ...options, transition: 0 }
+      : options
+    this.emotionSystem.clearEmotion(opts)
     this.idleSystem.setBlinkRateMultiplier(1.0)
     this.idleSystem.setBreathingRateMultiplier(1.0)
-    this.splatDirty = true
+    if (this.rendererType === 'splat') this.splatDirty = true
   }
 
   playGesture(name: string): boolean {
@@ -366,10 +373,6 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
 
     const finalWeights = this.blendshapeMixer.mix()
     const flameParams = this.blendshapeToFlame.convert(finalWeights)
-
-    // Mark dirty if any weights are non-zero (emotion transitioning, speaking, etc.)
-    const hasActivity = Object.keys(emotionWeights).length > 0 || Object.keys(lipSyncWeights).length > 0
-    if (hasActivity) this.splatDirty = true
 
     // Neck pose disabled for splat renderer — FLAME expressions handle the face,
     // neck rotation moves the entire head out of the tight camera frame.

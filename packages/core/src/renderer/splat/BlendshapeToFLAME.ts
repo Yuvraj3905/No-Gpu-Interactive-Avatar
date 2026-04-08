@@ -76,7 +76,7 @@ export class BlendshapeToFLAME {
     let exprMag = 0
     for (let i = 0; i < 100; i++) exprMag += this.result.expression[i] * this.result.expression[i]
     exprMag = Math.sqrt(exprMag)
-    const MAX_EXPR_MAG = 15.0
+    const MAX_EXPR_MAG = 10.0
     if (exprMag > MAX_EXPR_MAG) {
       const scale = MAX_EXPR_MAG / exprMag
       for (let i = 0; i < 100; i++) this.result.expression[i] *= scale
