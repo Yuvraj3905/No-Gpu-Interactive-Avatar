@@ -23,21 +23,21 @@ describe('BlendshapeToFLAME', () => {
     expect(mapper).toBeDefined()
   })
 
-  it('maps ARKit weights to FLAME expression params (amplified+clamped)', () => {
+  it('maps ARKit weights to FLAME expression params (clamped)', () => {
     const mapper = new BlendshapeToFLAME(createMockMappings())
     const weights: BlendshapeMap = { eyeBlinkLeft: 0.5 }
     const result = mapper.convert(weights)
-    // 0.5 * 2.0 (matrix) * 3.0 (EXPR_SCALE) = 3.0
-    expect(result.expression[0]).toBeCloseTo(3.0)
+    // 0.5 * 2.0 = 1.0, within clamp [-7,7]
+    expect(result.expression[0]).toBeCloseTo(1.0)
     expect(result.expression.length).toBe(100)
   })
 
-  it('maps viseme weights to jaw pose (amplified+clamped)', () => {
+  it('maps viseme weights to jaw pose (clamped)', () => {
     const mapper = new BlendshapeToFLAME(createMockMappings())
     const weights: BlendshapeMap = { viseme_aa: 1.0 }
     const result = mapper.convert(weights)
-    // 1.0 * 0.8 (matrix) * 3.0 (JAW_SCALE) = 2.4, clamped to 0.5
-    expect(result.jawPose[0]).toBeCloseTo(0.5)
+    // 1.0 * 0.8 = 0.8, clamped to 0.4 (jaw max)
+    expect(result.jawPose[0]).toBeCloseTo(0.4)
   })
 
   it('returns zero params for empty weights', () => {
@@ -48,15 +48,15 @@ describe('BlendshapeToFLAME', () => {
     expect(result.eyePose[0]).toBeCloseTo(0)
   })
 
-  it('combines multiple blendshapes additively (amplified+clamped)', () => {
+  it('combines multiple blendshapes additively (clamped)', () => {
     const mapper = new BlendshapeToFLAME(createMockMappings())
     const weights: BlendshapeMap = {
       eyeBlinkLeft: 0.5,
       eyeLookDownLeft: 0.4,
     }
     const result = mapper.convert(weights)
-    // 0.5 * 2.0 * 3.0 = 3.0, 0.4 * 1.5 * 3.0 = 1.8
-    expect(result.expression[0]).toBeCloseTo(3.0)
-    expect(result.expression[5]).toBeCloseTo(1.8)
+    // 0.5 * 2.0 = 1.0, 0.4 * 1.5 = 0.6
+    expect(result.expression[0]).toBeCloseTo(1.0)
+    expect(result.expression[5]).toBeCloseTo(0.6)
   })
 })

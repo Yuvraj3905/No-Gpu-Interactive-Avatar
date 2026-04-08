@@ -59,20 +59,17 @@ export class BlendshapeToFLAME {
     matVecMul(this.mappings.visemeToJaw, this.visemeVector, this.result.jawPose, 15, 3)
     matVecMul(this.mappings.eyeToPose, this.eyeVector, this.result.eyePose, 14, 6)
 
-    // Amplify and clamp — FLAME blendshape dirs are small,
-    // but over-amplification distorts the face
-    const EXPR_SCALE = 3.0
-    const JAW_SCALE = 3.0
-    const EYE_SCALE = 2.0
-    const EXPR_CLAMP = 5.0  // max FLAME expression coefficient
-    const JAW_CLAMP = 0.5   // max jaw rotation (radians)
+    // Clamp to real FLAME ranges (from training data analysis):
+    // expressions: [-7, 7], jaw: [-0.15, 0.4], eye: [-0.3, 0.3]
     for (let i = 0; i < 100; i++) {
-      this.result.expression[i] = Math.max(-EXPR_CLAMP, Math.min(EXPR_CLAMP, this.result.expression[i] * EXPR_SCALE))
+      this.result.expression[i] = Math.max(-7, Math.min(7, this.result.expression[i]))
     }
     for (let i = 0; i < 3; i++) {
-      this.result.jawPose[i] = Math.max(-JAW_CLAMP, Math.min(JAW_CLAMP, this.result.jawPose[i] * JAW_SCALE))
+      this.result.jawPose[i] = Math.max(-0.15, Math.min(0.4, this.result.jawPose[i]))
     }
-    for (let i = 0; i < 6; i++) this.result.eyePose[i] *= EYE_SCALE
+    for (let i = 0; i < 6; i++) {
+      this.result.eyePose[i] = Math.max(-0.3, Math.min(0.3, this.result.eyePose[i]))
+    }
 
     return this.result
   }
