@@ -46,7 +46,12 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
   private blendshapeToFlame: BlendshapeToFLAME | null = null
   private gaussianUpdater: GaussianUpdater | null = null
   private gaussianPositions: Float32Array | null = null
+  private gaussianLogScales: Float32Array | null = null
   private gaussianRotations: Float32Array | null = null
+  private gaussianColors: Float32Array | null = null
+  private gaussianOpacities: Float32Array | null = null
+  private splatDirty = false
+  private splatRebuilding = false
 
   constructor(options: AvatarOptions) {
     super()
@@ -164,12 +169,33 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
       const mappings = await this.loadBlendshapeMappings()
       this.blendshapeToFlame = new BlendshapeToFLAME(mappings)
 
-      this.gaussianUpdater = new GaussianUpdater(flameAssets.faces, binding)
-      this.gaussianPositions = new Float32Array(gaussianData.count * 3)
-      this.gaussianRotations = new Float32Array(gaussianData.count * 4)
+      const n = gaussianData.count
+      this.gaussianUpdater = new GaussianUpdater(
+        flameAssets.faces,
+        binding.triangleIndices,
+        gaussianData.positions,     // local xyz
+        gaussianData.scales,        // local log scales
+        gaussianData.rotations,     // local rotations (WXYZ)
+      )
+      this.gaussianPositions = new Float32Array(n * 3)
+      this.gaussianLogScales = new Float32Array(n * 3)
+      this.gaussianRotations = new Float32Array(n * 4)
+      this.gaussianColors = gaussianData.colors
+      this.gaussianOpacities = gaussianData.opacities
 
-      await this.splatScene.initBackend(gaussianData.count)
-      this.splatScene.uploadGaussians(gaussianData)
+      // Do initial FLAME deform to get first frame
+      const shape = this.splatAsset.getFLAMEShape()
+      const neutralParams = this.blendshapeToFlame.convert({})
+      const verts = this.flameModel.deform(shape, neutralParams)
+      this.gaussianUpdater.updateFaceProperties(verts)
+      this.gaussianUpdater.transformGaussians(this.gaussianPositions, this.gaussianLogScales, this.gaussianRotations)
+
+      // Init Spark with the computed world-space data
+      await this.splatScene.initBackend(n)
+      await this.splatScene.updateFromTransform(
+        this.gaussianPositions, this.gaussianLogScales, this.gaussianRotations,
+        this.gaussianColors, this.gaussianOpacities,
+      )
     }
 
     this.idleSystem.start()
@@ -324,7 +350,7 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
     this.lastFrameTime = now
 
     // Static PLY mode — no FLAME pipeline, just render
-    if (!this.blendshapeToFlame) return
+    if (!this.blendshapeToFlame || !this.flameModel || !this.gaussianUpdater) return
 
     const lipSyncWeights = this.speaking && this.lipSyncEngine ? this.lipSyncEngine.update() : {}
     const idleWeights = this.idleSystem.update(delta)
@@ -337,15 +363,30 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
     const finalWeights = this.blendshapeMixer.mix()
     const flameParams = this.blendshapeToFlame.convert(finalWeights)
 
+    // Apply head drift from idle + emotion
     const drift = this.idleSystem.getHeadDrift()
     const emotionMods = this.emotionSystem.getCurrentModifiers()
     flameParams.neckPose[0] = (drift.pitch + emotionMods.headPitchOffset) * Math.PI / 180
     flameParams.neckPose[1] = (drift.yaw + emotionMods.headYawOffset) * Math.PI / 180
     flameParams.neckPose[2] = drift.roll * Math.PI / 180
 
-    const deformedVertices = this.flameModel!.deform(this.splatAsset!.getFLAMEShape(), flameParams)
-    this.gaussianUpdater!.update(deformedVertices, this.gaussianPositions!, this.gaussianRotations!)
-    this.splatScene!.updatePositions(this.gaussianPositions!, this.gaussianRotations!)
+    // FLAME deform → face properties → Gaussian transform
+    const verts = this.flameModel.deform(this.splatAsset!.getFLAMEShape(), flameParams)
+    this.gaussianUpdater.updateFaceProperties(verts)
+    this.gaussianUpdater.transformGaussians(
+      this.gaussianPositions!, this.gaussianLogScales!, this.gaussianRotations!,
+    )
+
+    // Rebuild Spark SplatMesh (throttled — only when not already rebuilding)
+    if (!this.splatRebuilding) {
+      this.splatRebuilding = true
+      this.splatScene!.updateFromTransform(
+        this.gaussianPositions!, this.gaussianLogScales!, this.gaussianRotations!,
+        this.gaussianColors!, this.gaussianOpacities!,
+      ).then(() => {
+        this.splatRebuilding = false
+      })
+    }
   }
 
   private async loadFLAMEAssets(): Promise<FLAMEAssets> {

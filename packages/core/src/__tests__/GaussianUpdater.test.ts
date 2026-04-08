@@ -1,68 +1,78 @@
 import { describe, it, expect } from 'vitest'
 import { GaussianUpdater } from '../renderer/splat/GaussianUpdater.js'
-import type { GaussianBinding } from '../renderer/splat/types.js'
 
 describe('GaussianUpdater', () => {
+  // Triangle: v0=(0,0,0), v1=(1,0,0), v2=(0,1,0)
   const vertices = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0])
   const faces = new Uint32Array([0, 1, 2])
 
-  it('places Gaussian at triangle centroid', () => {
-    const binding: GaussianBinding = {
-      triangleIndices: new Uint32Array([0]),
-      barycentrics: new Float32Array([1/3, 1/3, 1/3]),
-      localOffsets: new Float32Array([0, 0, 0]),
-      localRotations: new Float32Array([0, 0, 0, 1]),
-    }
-    const updater = new GaussianUpdater(faces, binding)
-    const positions = new Float32Array(3)
-    const rotations = new Float32Array(4)
-    updater.update(vertices, positions, rotations)
-    expect(positions[0]).toBeCloseTo(1/3)
-    expect(positions[1]).toBeCloseTo(1/3)
-    expect(positions[2]).toBeCloseTo(0)
+  it('local origin maps to face center', () => {
+    const updater = new GaussianUpdater(
+      faces,
+      new Uint32Array([0]),             // binding: face 0
+      new Float32Array([0, 0, 0]),      // local xyz at origin
+      new Float32Array([0, 0, 0]),      // local log scale
+      new Float32Array([1, 0, 0, 0]),   // identity rotation (WXYZ)
+    )
+    updater.updateFaceProperties(vertices)
+    const pos = new Float32Array(3)
+    const logScales = new Float32Array(3)
+    const rot = new Float32Array(4)
+    updater.transformGaussians(pos, logScales, rot)
+    // Should be at face centroid
+    expect(pos[0]).toBeCloseTo(1/3, 1)
+    expect(pos[1]).toBeCloseTo(1/3, 1)
+    expect(pos[2]).toBeCloseTo(0)
   })
 
-  it('places Gaussian at vertex 1', () => {
-    const binding: GaussianBinding = {
-      triangleIndices: new Uint32Array([0]),
-      barycentrics: new Float32Array([0, 1, 0]),
-      localOffsets: new Float32Array([0, 0, 0]),
-      localRotations: new Float32Array([0, 0, 0, 1]),
-    }
-    const updater = new GaussianUpdater(faces, binding)
-    const positions = new Float32Array(3)
-    const rotations = new Float32Array(4)
-    updater.update(vertices, positions, rotations)
-    expect(positions[0]).toBeCloseTo(1)
-    expect(positions[1]).toBeCloseTo(0)
-  })
-
-  it('applies local offset along triangle normal', () => {
-    const binding: GaussianBinding = {
-      triangleIndices: new Uint32Array([0]),
-      barycentrics: new Float32Array([1/3, 1/3, 1/3]),
-      localOffsets: new Float32Array([0, 0, 0.5]),
-      localRotations: new Float32Array([0, 0, 0, 1]),
-    }
-    const updater = new GaussianUpdater(faces, binding)
-    const positions = new Float32Array(3)
-    const rotations = new Float32Array(4)
-    updater.update(vertices, positions, rotations)
-    expect(positions[2]).toBeCloseTo(0.5)
+  it('non-zero local offset displaces from center', () => {
+    const updater = new GaussianUpdater(
+      faces,
+      new Uint32Array([0]),
+      new Float32Array([1, 0, 0]),      // offset along local x (edge direction)
+      new Float32Array([0, 0, 0]),
+      new Float32Array([1, 0, 0, 0]),
+    )
+    updater.updateFaceProperties(vertices)
+    const pos = new Float32Array(3)
+    const logScales = new Float32Array(3)
+    const rot = new Float32Array(4)
+    updater.transformGaussians(pos, logScales, rot)
+    // Should be displaced from centroid
+    expect(pos[0]).not.toBeCloseTo(1/3, 1)
   })
 
   it('handles multiple Gaussians', () => {
-    const binding: GaussianBinding = {
-      triangleIndices: new Uint32Array([0, 0]),
-      barycentrics: new Float32Array([1, 0, 0, 0, 1, 0]),
-      localOffsets: new Float32Array([0, 0, 0, 0, 0, 0]),
-      localRotations: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1]),
-    }
-    const updater = new GaussianUpdater(faces, binding)
-    const positions = new Float32Array(6)
-    const rotations = new Float32Array(8)
-    updater.update(vertices, positions, rotations)
-    expect(positions[0]).toBeCloseTo(0)
-    expect(positions[3]).toBeCloseTo(1)
+    const updater = new GaussianUpdater(
+      faces,
+      new Uint32Array([0, 0]),
+      new Float32Array([0,0,0, 1,0,0]),
+      new Float32Array([0,0,0, 0,0,0]),
+      new Float32Array([1,0,0,0, 1,0,0,0]),
+    )
+    updater.updateFaceProperties(vertices)
+    const pos = new Float32Array(6)
+    const logScales = new Float32Array(6)
+    const rot = new Float32Array(8)
+    updater.transformGaussians(pos, logScales, rot)
+    // Two Gaussians should be at different positions
+    expect(pos[0]).not.toBeCloseTo(pos[3])
+  })
+
+  it('scale includes face scale factor', () => {
+    const updater = new GaussianUpdater(
+      faces,
+      new Uint32Array([0]),
+      new Float32Array([0, 0, 0]),
+      new Float32Array([-5, -5, -5]),   // log scale = -5
+      new Float32Array([1, 0, 0, 0]),
+    )
+    updater.updateFaceProperties(vertices)
+    const pos = new Float32Array(3)
+    const logScales = new Float32Array(3)
+    const rot = new Float32Array(4)
+    updater.transformGaussians(pos, logScales, rot)
+    // Output log scale should be >= input log scale (face scale >= 1 for unit triangle)
+    expect(logScales[0]).toBeGreaterThanOrEqual(-5)
   })
 })

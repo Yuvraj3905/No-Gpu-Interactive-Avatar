@@ -82,26 +82,7 @@ export class SplatScene {
 
   async initBackend(gaussianCount: number): Promise<void> {
     this.gaussianCount = gaussianCount
-    // Spark is loaded dynamically to avoid import issues in Node/test environments
-    try {
-      const spark = await import('@sparkjsdev/spark')
-      this.packedSplats = new spark.PackedSplats()
-      // Pre-allocate with dummy data — will be overwritten by uploadGaussians
-      const zeroVec3 = new THREE.Vector3(0, 0, 0)
-      const identityQuat = new THREE.Quaternion(0, 0, 0, 1)
-      const defaultScale = new THREE.Vector3(0.001, 0.001, 0.001)
-      const black = new THREE.Color(0, 0, 0)
-      for (let i = 0; i < gaussianCount; i++) {
-        this.packedSplats.pushSplat(zeroVec3, defaultScale, identityQuat, 0, black)
-      }
-
-      this.splatMesh = new spark.SplatMesh({
-        packedSplats: this.packedSplats,
-      })
-      this.scene.add(this.splatMesh)
-    } catch (err) {
-      throw new Error(`Failed to initialize Spark splat renderer: ${err}`)
-    }
+    // Just store the count — actual mesh creation happens in buildSplatMesh
   }
 
   uploadGaussians(data: GaussianData): void {
@@ -161,6 +142,47 @@ export class SplatScene {
     }
 
     this.packedSplats.needsUpdate = true
+  }
+
+  /**
+   * Build (or rebuild) the SplatMesh from pre-computed world-space transforms.
+   * Creates a fresh PackedSplats + SplatMesh each call.
+   */
+  async updateFromTransform(
+    positions: Float32Array,
+    logScales: Float32Array,
+    rotations: Float32Array,
+    colors: Float32Array,
+    opacities: Float32Array,
+  ): Promise<void> {
+    // Remove old mesh
+    if (this.splatMesh) {
+      this.scene.remove(this.splatMesh)
+      this.splatMesh.dispose?.()
+      this.splatMesh = null
+    }
+
+    const spark = await import('@sparkjsdev/spark')
+    const ps = new spark.PackedSplats()
+    this.packedSplats = ps
+
+    const center = new THREE.Vector3()
+    const scale = new THREE.Vector3()
+    const quat = new THREE.Quaternion()
+    const color = new THREE.Color()
+
+    for (let i = 0; i < this.gaussianCount; i++) {
+      center.set(positions[i*3], positions[i*3+1], positions[i*3+2])
+      scale.set(Math.exp(logScales[i*3]), Math.exp(logScales[i*3+1]), Math.exp(logScales[i*3+2]))
+      quat.set(rotations[i*4+1], rotations[i*4+2], rotations[i*4+3], rotations[i*4])
+      quat.normalize()
+      const opa = 1 / (1 + Math.exp(-opacities[i]))
+      color.setRGB(colors[i*3], colors[i*3+1], colors[i*3+2])
+      ps.pushSplat(center, scale, quat, opa, color)
+    }
+
+    this.splatMesh = new spark.SplatMesh({ packedSplats: ps })
+    this.scene.add(this.splatMesh)
   }
 
   onRender(callback: (delta: number) => void): void {

@@ -87,9 +87,10 @@
 
     const avatar = new LowCostAvatar({
       container,
-      avatar: './scan.ply',
+      avatar: './avatar-animated.lca',
       renderer: 'splat',
       quality: 'high',
+      assetsBaseUrl: './',
     })
 
     window.avatar = avatar
