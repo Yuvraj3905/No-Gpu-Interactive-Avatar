@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { GaussianData } from './types.js'
 import type { QualityTier } from '../../types/index.js'
 
@@ -19,6 +20,8 @@ export class SplatScene {
   private lastTime = 0
   private resizeObserver: ResizeObserver | null = null
 
+  private controls: OrbitControls | null = null
+
   // Spark splat mesh
   private splatMesh: any = null
   private packedSplats: any = null
@@ -36,9 +39,9 @@ export class SplatScene {
     this.scene = new THREE.Scene()
 
     const aspect = container.clientWidth / container.clientHeight
-    this.camera = new THREE.PerspectiveCamera(30, aspect, 0.1, 100)
-    this.camera.position.set(0, 1.5, 1.5)
-    this.camera.lookAt(0, 1.4, 0)
+    this.camera = new THREE.PerspectiveCamera(45, aspect, 0.01, 1000)
+    this.camera.position.set(0, 0, 3)
+    this.camera.lookAt(0, 0, 0)
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: quality === 'high',
@@ -49,6 +52,11 @@ export class SplatScene {
     this.renderer.setPixelRatio(quality === 'low' ? 1 : Math.min(window.devicePixelRatio, 2))
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     container.appendChild(this.renderer.domElement)
+
+    // Orbit controls for interactive viewing
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement)
+    this.controls.enableDamping = true
+    this.controls.target.set(0, 0, 0)
 
     // Lighting for any non-splat objects
     const ambient = new THREE.AmbientLight(0xffffff, 0.5)
@@ -167,6 +175,7 @@ export class SplatScene {
       const now = performance.now()
       const delta = (now - this.lastTime) / 1000
       this.lastTime = now
+      this.controls?.update()
       this.onRenderCallback?.(delta)
       this.renderer.render(this.scene, this.camera)
     }
@@ -183,6 +192,7 @@ export class SplatScene {
   dispose(): void {
     this.stopRenderLoop()
     this.resizeObserver?.disconnect()
+    this.controls?.dispose()
     if (this.splatMesh) {
       this.scene.remove(this.splatMesh)
       this.splatMesh.dispose?.()
