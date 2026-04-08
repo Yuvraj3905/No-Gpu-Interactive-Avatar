@@ -36,8 +36,8 @@ describe('BlendshapeToFLAME', () => {
     const mapper = new BlendshapeToFLAME(createMockMappings())
     const weights: BlendshapeMap = { viseme_aa: 1.0 }
     const result = mapper.convert(weights)
-    // 1.0 * 0.8 = 0.8, clamped to 0.4 (jaw max)
-    expect(result.jawPose[0]).toBeCloseTo(0.4)
+    // 1.0 * 0.8 = 0.8, clamped to 0.35 (jaw max)
+    expect(result.jawPose[0]).toBeCloseTo(0.35)
   })
 
   it('returns zero params for empty weights', () => {
