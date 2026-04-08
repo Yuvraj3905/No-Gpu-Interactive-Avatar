@@ -59,16 +59,27 @@ export class BlendshapeToFLAME {
     matVecMul(this.mappings.visemeToJaw, this.visemeVector, this.result.jawPose, 15, 3)
     matVecMul(this.mappings.eyeToPose, this.eyeVector, this.result.eyePose, 14, 6)
 
-    // Clamp to real FLAME ranges (from training data analysis):
-    // expressions: [-7, 7], jaw: [-0.15, 0.4], eye: [-0.3, 0.3]
+    // Clamp to safe FLAME ranges. The mapping can produce wild values when
+    // multiple ARKit blendshapes are active simultaneously. Real FLAME training
+    // data has expression std ~1.3, max ~7. We use a conservative clamp.
     for (let i = 0; i < 100; i++) {
-      this.result.expression[i] = Math.max(-7, Math.min(7, this.result.expression[i]))
+      this.result.expression[i] = Math.max(-4, Math.min(4, this.result.expression[i]))
     }
     for (let i = 0; i < 3; i++) {
-      this.result.jawPose[i] = Math.max(-0.15, Math.min(0.4, this.result.jawPose[i]))
+      this.result.jawPose[i] = Math.max(-0.1, Math.min(0.35, this.result.jawPose[i]))
     }
     for (let i = 0; i < 6; i++) {
-      this.result.eyePose[i] = Math.max(-0.3, Math.min(0.3, this.result.eyePose[i]))
+      this.result.eyePose[i] = Math.max(-0.2, Math.min(0.2, this.result.eyePose[i]))
+    }
+
+    // Global magnitude clamp: if total expression energy is too high, scale down
+    let exprMag = 0
+    for (let i = 0; i < 100; i++) exprMag += this.result.expression[i] * this.result.expression[i]
+    exprMag = Math.sqrt(exprMag)
+    const MAX_EXPR_MAG = 15.0
+    if (exprMag > MAX_EXPR_MAG) {
+      const scale = MAX_EXPR_MAG / exprMag
+      for (let i = 0; i < 100; i++) this.result.expression[i] *= scale
     }
 
     return this.result
