@@ -52,9 +52,9 @@
 
     // Load clean standard 3DGS PLY (no binding property, 57K Gaussians)
     try {
-      const splat = new SplatMesh({ url: './scan.ply' })
+      const splat = new SplatMesh({ url: './face-final.ply' })
       scene.add(splat)
-      info.textContent = 'Phone scan loaded. Drag to orbit, scroll to zoom.'
+      info.textContent = 'GaussianAvatars face (FLAME + rotations, 79K splats). Drag to orbit, scroll to zoom.'
     } catch (err) {
       info.textContent = 'Error: ' + err.message
       console.error(err)
