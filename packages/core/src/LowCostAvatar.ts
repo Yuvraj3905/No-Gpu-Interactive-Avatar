@@ -138,30 +138,39 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
 
   private async loadSplat(): Promise<void> {
     const quality = this.qualityManager.getCurrentTier()
-
-    const response = await fetch(this.options.avatar)
-    if (!response.ok) throw new Error(`Failed to load splat avatar from ${this.options.avatar}`)
-    const buffer = await response.arrayBuffer()
-
-    this.splatAsset = new SplatAsset()
-    await this.splatAsset.load(buffer)
-
-    const gaussianData = this.splatAsset.getGaussianData()
-    const binding = this.splatAsset.getBinding()
-
-    const flameAssets = await this.loadFLAMEAssets()
-    this.flameModel = new FLAMEModel(flameAssets)
-
-    const mappings = await this.loadBlendshapeMappings()
-    this.blendshapeToFlame = new BlendshapeToFLAME(mappings)
-
-    this.gaussianUpdater = new GaussianUpdater(flameAssets.faces, binding)
-    this.gaussianPositions = new Float32Array(gaussianData.count * 3)
-    this.gaussianRotations = new Float32Array(gaussianData.count * 4)
+    const avatarUrl = this.options.avatar
+    const isStaticPly = avatarUrl.endsWith('.ply') || avatarUrl.endsWith('.splat') || avatarUrl.endsWith('.spz')
 
     this.splatScene = new SplatScene(this.options.container, quality)
-    await this.splatScene.initBackend(gaussianData.count)
-    this.splatScene.uploadGaussians(gaussianData)
+
+    if (isStaticPly) {
+      // Static mode: load PLY/SPLAT/SPZ directly with Spark (no FLAME)
+      await this.splatScene.loadFromUrl(avatarUrl)
+    } else {
+      // Animated mode: load .lca with FLAME deformation pipeline
+      const response = await fetch(avatarUrl)
+      if (!response.ok) throw new Error(`Failed to load splat avatar from ${avatarUrl}`)
+      const buffer = await response.arrayBuffer()
+
+      this.splatAsset = new SplatAsset()
+      await this.splatAsset.load(buffer)
+
+      const gaussianData = this.splatAsset.getGaussianData()
+      const binding = this.splatAsset.getBinding()
+
+      const flameAssets = await this.loadFLAMEAssets()
+      this.flameModel = new FLAMEModel(flameAssets)
+
+      const mappings = await this.loadBlendshapeMappings()
+      this.blendshapeToFlame = new BlendshapeToFLAME(mappings)
+
+      this.gaussianUpdater = new GaussianUpdater(flameAssets.faces, binding)
+      this.gaussianPositions = new Float32Array(gaussianData.count * 3)
+      this.gaussianRotations = new Float32Array(gaussianData.count * 4)
+
+      await this.splatScene.initBackend(gaussianData.count)
+      this.splatScene.uploadGaussians(gaussianData)
+    }
 
     this.idleSystem.start()
     this.splatScene.onRender((delta) => this.onSplatFrame(delta))

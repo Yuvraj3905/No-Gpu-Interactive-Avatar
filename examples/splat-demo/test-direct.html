@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Direct Spark PLY Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+    #container { width: 100vw; height: 100vh; }
+    #info {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      color: #fff;
+      font: 14px monospace;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 6px;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">Loading PLY directly with Spark...</div>
+  <div id="container"></div>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import { SplatMesh } from '@sparkjsdev/spark'
+    import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+
+    const info = document.getElementById('info')
+    const container = document.getElementById('container')
+
+    // Three.js setup
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color(0x1a1a2e)
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000)
+    camera.position.set(0, 0, 3)
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    container.appendChild(renderer.domElement)
+
+    // Orbit controls so you can rotate/zoom
+    const controls = new OrbitControls(camera, renderer.domElement)
+    controls.target.set(0, 0, 0)
+    controls.enableDamping = true
+
+    // Load clean standard 3DGS PLY (no binding property, 57K Gaussians)
+    try {
+      const splat = new SplatMesh({ url: './scan.ply' })
+      scene.add(splat)
+      info.textContent = 'Phone scan loaded. Drag to orbit, scroll to zoom.'
+    } catch (err) {
+      info.textContent = 'Error: ' + err.message
+      console.error(err)
+    }
+
+    // Render loop
+    function animate() {
+      requestAnimationFrame(animate)
+      controls.update()
+      renderer.render(scene, camera)
+    }
+    animate()
+
+    // Resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight
+      camera.updateProjectionMatrix()
+      renderer.setSize(window.innerWidth, window.innerHeight)
+    })
+  </script>
+</body>
+</html>

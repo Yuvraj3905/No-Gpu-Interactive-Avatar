@@ -66,8 +66,7 @@
     </div>
     <p class="status" id="status">Loading Gaussian splat avatar...</p>
     <p class="status">
-      This demo requires a .lca avatar file and FLAME assets.
-      See docs for how to create them.
+      Static photorealistic scan rendered client-side via Gaussian splatting. Zero GPU server cost.
     </p>
   </div>
 
@@ -88,10 +87,9 @@
 
     const avatar = new LowCostAvatar({
       container,
-      avatar: './avatar.lca',
+      avatar: './scan.ply',
       renderer: 'splat',
       quality: 'high',
-      assetsBaseUrl: './',
     })
 
     window.avatar = avatar

@@ -58,6 +58,20 @@ export class SplatScene {
     this.resizeObserver.observe(container)
   }
 
+  /**
+   * Load a static PLY/SPLAT/SPZ file directly with Spark.
+   * No FLAME deformation — just render as-is.
+   */
+  async loadFromUrl(url: string): Promise<void> {
+    try {
+      const spark = await import('@sparkjsdev/spark')
+      this.splatMesh = new spark.SplatMesh({ url })
+      this.scene.add(this.splatMesh)
+    } catch (err) {
+      throw new Error(`Failed to load splat from ${url}: ${err}`)
+    }
+  }
+
   async initBackend(gaussianCount: number): Promise<void> {
     this.gaussianCount = gaussianCount
     // Spark is loaded dynamically to avoid import issues in Node/test environments
