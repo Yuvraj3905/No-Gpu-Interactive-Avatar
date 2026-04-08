@@ -323,6 +323,9 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
     }
     this.lastFrameTime = now
 
+    // Static PLY mode — no FLAME pipeline, just render
+    if (!this.blendshapeToFlame) return
+
     const lipSyncWeights = this.speaking && this.lipSyncEngine ? this.lipSyncEngine.update() : {}
     const idleWeights = this.idleSystem.update(delta)
     const emotionWeights = this.emotionSystem.update(delta)
@@ -332,7 +335,7 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
     this.blendshapeMixer.setChannel('emotion', emotionWeights)
 
     const finalWeights = this.blendshapeMixer.mix()
-    const flameParams = this.blendshapeToFlame!.convert(finalWeights)
+    const flameParams = this.blendshapeToFlame.convert(finalWeights)
 
     const drift = this.idleSystem.getHeadDrift()
     const emotionMods = this.emotionSystem.getCurrentModifiers()
