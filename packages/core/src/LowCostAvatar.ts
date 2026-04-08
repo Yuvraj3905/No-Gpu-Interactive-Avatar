@@ -252,12 +252,14 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
     const mods = this.emotionSystem.getCurrentModifiers()
     this.idleSystem.setBlinkRateMultiplier(mods.blinkRateMultiplier)
     this.idleSystem.setBreathingRateMultiplier(mods.breathingRateMultiplier)
+    this.splatDirty = true
   }
 
   clearEmotion(options?: TransitionOptions): void {
     this.emotionSystem.clearEmotion(options)
     this.idleSystem.setBlinkRateMultiplier(1.0)
     this.idleSystem.setBreathingRateMultiplier(1.0)
+    this.splatDirty = true
   }
 
   playGesture(name: string): boolean {
@@ -377,8 +379,9 @@ export class LowCostAvatar extends EventEmitter<AvatarEventMap> {
       this.gaussianPositions!, this.gaussianLogScales!, this.gaussianRotations!,
     )
 
-    // Rebuild Spark SplatMesh (throttled — only when not already rebuilding)
-    if (!this.splatRebuilding) {
+    // Only rebuild SplatMesh when expression changed (not every frame)
+    if (this.splatDirty && !this.splatRebuilding) {
+      this.splatDirty = false
       this.splatRebuilding = true
       this.splatScene!.updateFromTransform(
         this.gaussianPositions!, this.gaussianLogScales!, this.gaussianRotations!,
