@@ -1,106 +1,94 @@
+/**
+ * Speech speaker using edge-tts server for high-quality neural voice.
+ * Fetches audio from TTS server, decodes to AudioBuffer, and uses
+ * the SDK's speak() method for proper frequency-based lip-sync.
+ * Falls back to mouth animation without audio if TTS server is unavailable.
+ */
 export class SpeechSpeaker {
   constructor(avatarController) {
     this.ac = avatarController
     this.speaking = false
-    this.currentUtterance = null
-    this.animFrame = null
-    this.selectedVoice = null
-    this._selectVoice()
-    speechSynthesis.onvoiceschanged = () => this._selectVoice()
-  }
-
-  _selectVoice() {
-    const voices = speechSynthesis.getVoices()
-    this.selectedVoice =
-      voices.find(v => v.name.includes('Female') && v.lang.startsWith('en')) ||
-      voices.find(v => v.name.includes('Samantha')) ||
-      voices.find(v => v.name.includes('Google UK English Female')) ||
-      voices.find(v => v.lang.startsWith('en')) ||
-      voices[0] || null
+    this.audioContext = null
+    this.ttsUrl = '/api/tts'
+    this.ttsAvailable = null // null = unknown, true/false after first check
   }
 
   async speakSentence(text) {
     if (!text.trim()) return
     this.speaking = true
 
-    // Cancel any pending speech first
-    speechSynthesis.cancel()
-    // Small delay after cancel to prevent Chrome bug
-    await new Promise(r => setTimeout(r, 50))
-
-    return new Promise((resolve) => {
-      let resolved = false
-      const done = () => {
-        if (resolved) return
-        resolved = true
-        this.speaking = false
-        cancelAnimationFrame(this.animFrame)
-        this.ac.closeMouth()
-        this.currentUtterance = null
-        resolve()
-      }
-
-      // Safety timeout — if TTS doesn't fire onend within 30s, resolve anyway
-      const safetyTimeout = setTimeout(done, 30000)
-
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.rate = 1.0
-      utterance.pitch = 1.1
-      if (this.selectedVoice) utterance.voice = this.selectedVoice
-      this.currentUtterance = utterance
-
-      let boundarySupported = false
-      let currentVisemes = []
-      let visemeStart = 0
-      const VISEME_MS = 120
-
-      const animate = () => {
-        if (!this.speaking) return
-        if (boundarySupported && currentVisemes.length > 0) {
-          const elapsed = performance.now() - visemeStart
-          const idx = Math.min(Math.floor(elapsed / VISEME_MS), currentVisemes.length - 1)
-          this.ac.setViseme(currentVisemes[idx], 0.7)
-        } else if (!boundarySupported && this.speaking) {
-          const t = performance.now() / 1000
-          const amount = (Math.sin(t * 12) + 1) * 0.25
-          this.ac.setMouthOpen(amount)
-        }
-        this.animFrame = requestAnimationFrame(animate)
-      }
-
-      utterance.onstart = () => {
-        this.animFrame = requestAnimationFrame(animate)
-      }
-
-      utterance.onboundary = (event) => {
-        if (event.name === 'word') {
-          boundarySupported = true
-          const word = text.substring(event.charIndex, event.charIndex + (event.charLength || 4))
-          currentVisemes = this._wordToVisemes(word)
-          visemeStart = performance.now()
+    try {
+      // Try TTS server first
+      if (this.ttsAvailable !== false) {
+        const spoken = await this._speakWithTTS(text)
+        if (spoken) {
+          this.speaking = false
+          return
         }
       }
 
-      utterance.onend = () => {
-        clearTimeout(safetyTimeout)
-        done()
+      // Fallback: animate mouth without audio (visual-only lip sync)
+      await this._animateWithoutAudio(text)
+    } finally {
+      this.speaking = false
+      this.ac.closeMouth()
+    }
+  }
+
+  async _speakWithTTS(text) {
+    try {
+      const response = await fetch(this.ttsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+
+      if (!response.ok) {
+        this.ttsAvailable = false
+        return false
       }
 
-      utterance.onerror = () => {
-        clearTimeout(safetyTimeout)
-        done()
+      this.ttsAvailable = true
+
+      // Decode audio
+      if (!this.audioContext) {
+        this.audioContext = new AudioContext()
       }
 
-      speechSynthesis.speak(utterance)
-    })
+      const arrayBuffer = await response.arrayBuffer()
+      const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer)
+
+      // Use the SDK's speak() for real frequency-based lip-sync
+      await this.ac.avatar.speak(audioBuffer)
+      return true
+    } catch {
+      this.ttsAvailable = false
+      return false
+    }
+  }
+
+  async _animateWithoutAudio(text) {
+    // Visual-only fallback: animate mouth based on text length
+    const words = text.split(/\s+/)
+    const msPerWord = 200
+
+    for (const word of words) {
+      if (!this.speaking) break
+      const visemes = this._wordToVisemes(word)
+      for (const viseme of visemes) {
+        if (!this.speaking) break
+        this.ac.setViseme(viseme, 0.7)
+        await new Promise(r => setTimeout(r, 100))
+      }
+      // Brief pause between words
+      this.ac.setMouthOpen(0.05)
+      await new Promise(r => setTimeout(r, 50))
+    }
   }
 
   stop() {
     this.speaking = false
-    speechSynthesis.cancel()
-    cancelAnimationFrame(this.animFrame)
     this.ac.closeMouth()
-    this.currentUtterance = null
   }
 
   isSpeaking() { return this.speaking }
@@ -114,9 +102,8 @@ export class SpeechSpeaker {
       else if ('mbp'.includes(char)) visemes.push('closed')
       else if ('fv'.includes(char)) visemes.push('teeth')
       else if ('sz'.includes(char)) visemes.push('narrow')
-      else if ('aeiou'.includes(char)) visemes.push('open')
     }
     if (visemes.length === 0) visemes.push('default')
-    return visemes.slice(0, 4) // max 4 visemes per word
+    return visemes.slice(0, 3)
   }
 }

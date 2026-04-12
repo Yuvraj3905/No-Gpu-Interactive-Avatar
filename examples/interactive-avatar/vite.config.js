@@ -8,6 +8,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/ollama/, ''),
       },
+      '/api/tts': {
+        target: 'http://localhost:5190',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/tts/, '/tts'),
+      },
     },
   },
 })
