@@ -29,8 +29,8 @@ export class AvatarController {
     const scene = this.avatar.sceneManager
     if (scene) {
       const cam = scene.getCamera()
-      cam.position.set(0, 1.55, 0.8)
-      cam.lookAt(0, 1.5, 0)
+      cam.position.set(0, 1.45, 1.1)
+      cam.lookAt(0, 1.4, 0)
       cam.updateProjectionMatrix()
     }
   }
