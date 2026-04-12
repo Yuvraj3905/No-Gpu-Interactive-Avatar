@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ava - Interactive Avatar</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #e6edf3;
+      letter-spacing: -0.02em;
+    }
+
+    /* Avatar container */
+    #avatar-container {
+      width: 400px;
+      height: 500px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #161b22;
+      border: 1px solid #30363d;
+      position: relative;
+    }
+
+    #avatar-container canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+    /* Status bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 8px 16px;
+      background: #161b22;
+      border-radius: 20px;
+      border: 1px solid #30363d;
+      font-size: 0.85rem;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: #484f58;
+      transition: background 0.3s;
+    }
+
+    .status-dot.loading {
+      background: #d29922;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .status-dot.idle {
+      background: #484f58;
+    }
+
+    .status-dot.listening {
+      background: #3fb950;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .status-dot.thinking {
+      background: #d29922;
+      animation: pulse 0.8s ease-in-out infinite;
+    }
+
+    .status-dot.speaking {
+      background: #58a6ff;
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    .status-dot.error {
+      background: #f85149;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    /* Live transcript */
+    #live-transcript {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      font-style: italic;
+      color: #8b949e;
+      min-height: 1.2em;
+      text-align: center;
+      max-width: 400px;
+      word-wrap: break-word;
+    }
+
+    /* Chat history */
+    #chat-history {
+      margin-top: 16px;
+      width: 400px;
+      max-height: 240px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      background: #161b22;
+      border-radius: 12px;
+      border: 1px solid #30363d;
+    }
+
+    #chat-history::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #chat-history::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    #chat-history::-webkit-scrollbar-thumb {
+      background: #30363d;
+      border-radius: 3px;
+    }
+
+    .chat-bubble {
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      line-height: 1.4;
+      max-width: 85%;
+      word-wrap: break-word;
+    }
+
+    .chat-bubble.user {
+      background: #1f6feb;
+      color: #fff;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-bubble.assistant {
+      background: #21262d;
+      color: #e6edf3;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+      border: 1px solid #30363d;
+    }
+
+    /* Mic button */
+    #mic-btn {
+      margin-top: 16px;
+      padding: 10px 28px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      background: #238636;
+      color: #fff;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    #mic-btn:hover {
+      background: #2ea043;
+    }
+
+    #mic-btn:active {
+      transform: scale(0.97);
+    }
+
+    #mic-btn.muted {
+      background: #da3633;
+    }
+
+    #mic-btn.muted:hover {
+      background: #f85149;
+    }
+
+    /* Responsive */
+    @media (max-width: 460px) {
+      #avatar-container,
+      #chat-history {
+        width: 100%;
+      }
+
+      #live-transcript {
+        max-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Ava - Interactive Avatar</h1>
+  <div id="avatar-container"></div>
+
+  <div class="status-bar">
+    <span id="status-dot" class="status-dot"></span>
+    <span id="status-text">Initializing...</span>
+  </div>
+
+  <div id="live-transcript"></div>
+
+  <div id="chat-history"></div>
+
+  <button id="mic-btn">Mic On</button>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
