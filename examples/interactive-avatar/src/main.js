@@ -122,13 +122,17 @@ async function main() {
     } catch (err) {
       console.error('Error:', err)
       ui.addChatBubble('assistant', 'Sorry, I had trouble connecting. Is Ollama running?')
+    } finally {
+      // Always reset — even if something failed
+      avatarController.clearEmotion()
+      processing = false
+      if (!micMuted) {
+        recognizer.unmute()
+        ui.setStatus('Listening...', 'listening')
+      } else {
+        ui.setStatus('Microphone muted', 'idle')
+      }
     }
-
-    // Reset
-    avatarController.clearEmotion()
-    ui.setStatus('Listening...', 'listening')
-    processing = false
-    if (!micMuted) recognizer.unmute()
   })
 
   // Start always-listening

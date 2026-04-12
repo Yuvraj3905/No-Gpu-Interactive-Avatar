@@ -23,7 +23,26 @@ export class SpeechSpeaker {
     if (!text.trim()) return
     this.speaking = true
 
+    // Cancel any pending speech first
+    speechSynthesis.cancel()
+    // Small delay after cancel to prevent Chrome bug
+    await new Promise(r => setTimeout(r, 50))
+
     return new Promise((resolve) => {
+      let resolved = false
+      const done = () => {
+        if (resolved) return
+        resolved = true
+        this.speaking = false
+        cancelAnimationFrame(this.animFrame)
+        this.ac.closeMouth()
+        this.currentUtterance = null
+        resolve()
+      }
+
+      // Safety timeout — if TTS doesn't fire onend within 30s, resolve anyway
+      const safetyTimeout = setTimeout(done, 30000)
+
       const utterance = new SpeechSynthesisUtterance(text)
       utterance.rate = 1.0
       utterance.pitch = 1.1
@@ -42,7 +61,6 @@ export class SpeechSpeaker {
           const idx = Math.min(Math.floor(elapsed / VISEME_MS), currentVisemes.length - 1)
           this.ac.setViseme(currentVisemes[idx], 0.7)
         } else if (!boundarySupported && this.speaking) {
-          // Fallback: oscillate mouth
           const t = performance.now() / 1000
           const amount = (Math.sin(t * 12) + 1) * 0.25
           this.ac.setMouthOpen(amount)
@@ -64,19 +82,13 @@ export class SpeechSpeaker {
       }
 
       utterance.onend = () => {
-        this.speaking = false
-        cancelAnimationFrame(this.animFrame)
-        this.ac.closeMouth()
-        this.currentUtterance = null
-        resolve()
+        clearTimeout(safetyTimeout)
+        done()
       }
 
       utterance.onerror = () => {
-        this.speaking = false
-        cancelAnimationFrame(this.animFrame)
-        this.ac.closeMouth()
-        this.currentUtterance = null
-        resolve()
+        clearTimeout(safetyTimeout)
+        done()
       }
 
       speechSynthesis.speak(utterance)

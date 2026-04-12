@@ -67,7 +67,17 @@ export class SpeechRecognizer {
     try { this.recognition.stop() } catch {}
   }
 
-  mute() { this.muted = true }
-  unmute() { this.muted = false }
+  mute() {
+    this.muted = true
+  }
+
+  unmute() {
+    this.muted = false
+    // Restart recognition if it stopped while muted
+    if (this.running) {
+      try { this.recognition.start() } catch {}
+    }
+  }
+
   isSupported() { return this.supported }
 }
