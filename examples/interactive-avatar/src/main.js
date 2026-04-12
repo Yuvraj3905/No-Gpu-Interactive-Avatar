@@ -30,9 +30,7 @@ async function main() {
   // Welcome message
   setTimeout(async () => {
     avatarController.setEmotion('happy', 0.7)
-    avatarController.playGesture('wave')
-    // Stop wave gesture after 2.5 seconds so hand returns to rest
-    setTimeout(() => avatarController.avatar.stopGesture({ transition: 500 }), 2500)
+    avatarController.playGesture('nod')
     ui.addChatBubble('assistant', "Hi! I'm Ava. Just start talking to me!")
     await speaker.speakSentence("Hi! I'm Ava. Just start talking to me!")
     avatarController.clearEmotion()

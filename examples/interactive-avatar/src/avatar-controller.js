@@ -24,6 +24,15 @@ export class AvatarController {
       cache: true,
     })
     await this.avatar.load()
+
+    // Zoom camera to head+shoulders framing (hides T-pose arms)
+    const scene = this.avatar.sceneManager
+    if (scene) {
+      const cam = scene.getCamera()
+      cam.position.set(0, 1.55, 0.8)
+      cam.lookAt(0, 1.5, 0)
+      cam.updateProjectionMatrix()
+    }
   }
 
   setEmotion(name, intensity = 0.8) {
